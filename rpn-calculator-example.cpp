@@ -50,101 +50,149 @@ uint8_t const width = 16U;
  */
 shared_ptr<uint16_t> rpn_calc(command const cmd, uint16_t const value = 0)
 {
-
-        static vector<uint16_t> stk;
-
-    // CSV "no value" sentinel (-999) arrives as this uint16_t
+    static vector<uint16_t> stk;
     constexpr uint16_t NO_VALUE = static_cast<uint16_t>(-999);
 
-    auto top_ptr = [&]() -> shared_ptr<uint16_t> {
-        if (stk.empty()) return nullptr;
+    auto top_ptr = [&]() -> shared_ptr<uint16_t>
+    {
+        if (stk.empty())
+            return nullptr;
         return make_shared<uint16_t>(stk.back());
     };
 
-    auto mask16 = [](uint32_t x) -> uint16_t { return static_cast<uint16_t>(x & 0xFFFFu); };
+    auto mask16 = [](uint32_t x) -> uint16_t
+    { return static_cast<uint16_t>(x & 0xFFFFu); };
 
-    switch (cmd) {
-        case cmd_enter: {
-            stk.push_back(mask16(value));
-            return top_ptr();
-        }
-        case cmd_clear: {
+    switch (cmd)
+    {
+    case cmd_enter:
+    {
+        stk.push_back(mask16(value));
+        return top_ptr();
+    }
+    case cmd_clear:
+    {
+        stk.clear();
+        return nullptr;
+    }
+    case cmd_pop:
+    {
+        size_t n = (value != NO_VALUE && value > 0) ? static_cast<size_t>(value) : 1u;
+        if (n >= stk.size())
+        {
             stk.clear();
             return nullptr;
         }
-        case cmd_pop: {
-            // Pop N if provided (>0), else pop 1
-            size_t n = (value != NO_VALUE && value > 0) ? static_cast<size_t>(value) : 1u;
-            if (n >= stk.size()) {
-                stk.clear();
+        while (n-- && !stk.empty())
+            stk.pop_back();
+        return top_ptr();
+    }
+    case cmd_top:
+    {
+        return top_ptr();
+    }
+    case cmd_left_shift:
+    {
+        if (stk.empty())
+            return nullptr;
+        uint16_t shift_amt;
+        if (value != NO_VALUE)
+        {
+            shift_amt = static_cast<uint16_t>(value & 0xF);
+        }
+        else
+        {
+            if (stk.size() < 2)
+                return nullptr;
+            shift_amt = static_cast<uint16_t>(stk.back() & 0xF);
+            stk.pop_back();
+        }
+        uint32_t v = static_cast<uint32_t>(stk.back()) << shift_amt;
+        stk.back() = mask16(v);
+        return top_ptr();
+    }
+    case cmd_right_shift:
+    {
+        if (stk.empty())
+            return nullptr;
+        uint16_t shift_amt;
+        if (value != NO_VALUE)
+        {
+            shift_amt = static_cast<uint16_t>(value & 0xF);
+        }
+        else
+        {
+            if (stk.size() < 2)
+                return nullptr;
+            shift_amt = static_cast<uint16_t>(stk.back() & 0xF);
+            stk.pop_back();
+        }
+        stk.back() = static_cast<uint16_t>(static_cast<uint32_t>(stk.back()) >> shift_amt);
+        return top_ptr();
+    }
+    case cmd_or:
+    {
+        if (stk.size() < 2)
+            return nullptr;
+        uint16_t b = stk.back();
+        stk.pop_back();
+        uint16_t a = stk.back();
+        stk.pop_back();
+        stk.push_back(static_cast<uint16_t>((a | b) & 0xFFFFu));
+        return top_ptr();
+    }
+    case cmd_and:
+    {
+        if (stk.size() < 2)
+            return nullptr;
+        uint16_t b = stk.back();
+        stk.pop_back();
+        uint16_t a = stk.back();
+        stk.pop_back();
+        stk.push_back(static_cast<uint16_t>((a & b) & 0xFFFFu));
+        return top_ptr();
+    }
+    case cmd_add:
+    {
+        auto will_overflow16 = [](uint32_t a, uint32_t b)
+        {
+            return (a + b) > 0xFFFFu;
+        };
+
+        // Unary add if a value is explicitly provided (including 0):
+        if (value != NO_VALUE)
+        {
+            if (stk.empty())
+                return nullptr;
+            uint32_t a = stk.back();
+            uint32_t b = static_cast<uint32_t>(value & 0xFFFFu);
+            if (will_overflow16(a, b))
+            {
                 return nullptr;
             }
-            while (n-- && !stk.empty()) stk.pop_back();
+            stk.pop_back();
+            stk.push_back(static_cast<uint16_t>((a + b) & 0xFFFFu));
             return top_ptr();
         }
-        case cmd_top: {
-            return top_ptr();
-        }
-        case cmd_left_shift: {
-            if (stk.empty()) return nullptr;
-            uint16_t shift_amt;
-            if (value != NO_VALUE) {
-                shift_amt = static_cast<uint16_t>(value & 0xF);
-            } else {
-                if (stk.size() < 2) return nullptr;
-                shift_amt = static_cast<uint16_t>(stk.back() & 0xF);
-                stk.pop_back();
-            }
-            uint32_t v = static_cast<uint32_t>(stk.back()) << shift_amt;
-            stk.back() = mask16(v);
-            return top_ptr();
-        }
-        case cmd_right_shift: {
-            if (stk.empty()) return nullptr;
-            uint16_t shift_amt;
-            if (value != NO_VALUE) {
-                shift_amt = static_cast<uint16_t>(value & 0xF);
-            } else {
-                if (stk.size() < 2) return nullptr;
-                shift_amt = static_cast<uint16_t>(stk.back() & 0xF);
-                stk.pop_back();
-            }
-            stk.back() = static_cast<uint16_t>(static_cast<uint32_t>(stk.back()) >> shift_amt);
-            return top_ptr();
-        }
-        case cmd_or: {
-            if (stk.size() < 2) return nullptr;
-            uint16_t b = stk.back(); stk.pop_back();
-            uint16_t a = stk.back(); stk.pop_back();
-            stk.push_back(static_cast<uint16_t>((a | b) & 0xFFFFu));
-            return top_ptr();
-        }
-        case cmd_and: {
-            if (stk.size() < 2) return nullptr;
-            uint16_t b = stk.back(); stk.pop_back();
-            uint16_t a = stk.back(); stk.pop_back();
-            stk.push_back(static_cast<uint16_t>((a & b) & 0xFFFFu));
-            return top_ptr();
-        }
-        case cmd_add: {
-            // If a value is present (including 0), do a UNARY add: top = top + value
-            if (value != NO_VALUE) {
-                if (stk.empty()) return nullptr;
-                uint32_t a = stk.back(); stk.pop_back();
-                stk.push_back(mask16(a + static_cast<uint32_t>(value)));
-                return top_ptr();
-            }
-            // Otherwise, BINARY add: pop two, push sum
-            if (stk.size() < 2) return nullptr;
-            uint32_t b = stk.back(); stk.pop_back();
-            uint32_t a = stk.back(); stk.pop_back();
-            stk.push_back(mask16(a + b));
-            return top_ptr();
-        }
-        default:
-            return top_ptr();
-    }
 
+        // Binary add (no value provided): pop 2, push sum — unless it overflows.
+        if (stk.size() < 2)
+            return nullptr;
+        uint32_t b = stk.back();
+        stk.pop_back();
+        uint32_t a = stk.back();
+        if (will_overflow16(a, b))
+        {
+            stk.push_back(static_cast<uint16_t>(b & 0xFFFFu));
+            return nullptr;
+        }
+        stk.pop_back(); // now remove a
+        stk.push_back(static_cast<uint16_t>((a + b) & 0xFFFFu));
+        return top_ptr();
+    }
+    default:
+        return top_ptr();
+    }
 }
 
 /*
