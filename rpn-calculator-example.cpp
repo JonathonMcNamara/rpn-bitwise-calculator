@@ -158,8 +158,7 @@ shared_ptr<uint16_t> rpn_calc(command const cmd, uint16_t const value = 0)
         {
             return (a + b) > 0xFFFFu;
         };
-
-        // Unary add if a value is explicitly provided (including 0):
+        
         if (value != NO_VALUE)
         {
             if (stk.empty())
@@ -174,8 +173,6 @@ shared_ptr<uint16_t> rpn_calc(command const cmd, uint16_t const value = 0)
             stk.push_back(static_cast<uint16_t>((a + b) & 0xFFFFu));
             return top_ptr();
         }
-
-        // Binary add (no value provided): pop 2, push sum — unless it overflows.
         if (stk.size() < 2)
             return nullptr;
         uint32_t b = stk.back();
@@ -186,7 +183,7 @@ shared_ptr<uint16_t> rpn_calc(command const cmd, uint16_t const value = 0)
             stk.push_back(static_cast<uint16_t>(b & 0xFFFFu));
             return nullptr;
         }
-        stk.pop_back(); // now remove a
+        stk.pop_back();
         stk.push_back(static_cast<uint16_t>((a + b) & 0xFFFFu));
         return top_ptr();
     }
