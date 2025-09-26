@@ -49,51 +49,86 @@ uint8_t const width = 16U;
  */
 shared_ptr<uint16_t> rpn_calc(command const cmd, uint16_t const value = 0) {
 
-    static vector<uint16_t> stk;
+ static vector<uint16_t> stk;
+
+    // In the CSV, "no value provided" is -999 (VALUE_NULLPTR).
+    // That arrives here as uint16_t( -999 ) == 64537.
+    constexpr uint16_t NO_VALUE = static_cast<uint16_t>(-999);
 
     auto top_ptr = [&]() -> shared_ptr<uint16_t> {
         if (stk.empty()) return nullptr;
         return make_shared<uint16_t>(stk.back());
     };
 
-    auto mask16 = [](uint32_t x) -> uint16_t { return static_cast<uint16_t>(x & 0xFFFFu); };
+    auto mask16 = [](uint32_t x) -> uint16_t {
+        return static_cast<uint16_t>(x & 0xFFFFu);
+    };
 
     switch (cmd) {
         case cmd_enter: {
+            // Push exactly what was entered, wrapped to 16 bits.
             stk.push_back(mask16(value));
             return top_ptr();
         }
+
         case cmd_clear: {
             stk.clear();
             return nullptr;
         }
+
         case cmd_pop: {
-            // Pop N items if value > 0, else pop 1 by default
-            size_t n = (value > 0) ? static_cast<size_t>(value) : 1u;
+            // Pop N items when value is given; otherwise pop 1.
+            size_t n = (value != NO_VALUE && value > 0) ? static_cast<size_t>(value) : 1u;
             if (n >= stk.size()) {
                 stk.clear();
                 return nullptr;
-            } else {
-                while (n-- && !stk.empty()) stk.pop_back();
-                return top_ptr();
             }
+            while (n-- && !stk.empty()) stk.pop_back();
+            return top_ptr();
         }
+
         case cmd_top: {
             return top_ptr();
         }
+
         case cmd_left_shift: {
             if (stk.empty()) return nullptr;
-            uint16_t shift = static_cast<uint16_t>(value & 0xF); // 0..15
-            uint32_t v = (static_cast<uint32_t>(stk.back()) << shift);
+
+            uint16_t shift_amt = 0;
+            if (value != NO_VALUE) {
+                shift_amt = static_cast<uint16_t>(value & 0xF);          // explicit count
+            } else {
+                // pop shift amount from stack (RPN style)
+                if (stk.size() < 2) return nullptr;
+                shift_amt = static_cast<uint16_t>(stk.back() & 0xF);
+                stk.pop_back();
+            }
+
+            uint32_t v = static_cast<uint32_t>(stk.back()) << shift_amt;
             stk.back() = mask16(v);
             return top_ptr();
         }
+
         case cmd_right_shift: {
             if (stk.empty()) return nullptr;
-            uint16_t shift = static_cast<uint16_t>(value & 0xF); // logical right shift
-            stk.back() = static_cast<uint16_t>(static_cast<uint32_t>(stk.back()) >> shift);
+
+            uint16_t shift_amt = 0;
+            if (value != NO_VALUE) {
+                shift_amt = static_cast<uint16_t>(value & 0xF);          // explicit count
+            } else {
+                // pop shift amount from stack (RPN style)
+                if (stk.size() < 2) return nullptr;
+                shift_amt = static_cast<uint16_t>(stk.back() & 0xF);
+                stk.pop_back();
+            }
+
+            // logical right shift
+            stk.back() = static_cast<uint16_t>(
+                static_cast<uint32_t>(stk.back()) >> shift_amt
+            );
             return top_ptr();
         }
+
         case cmd_or: {
             if (stk.size() < 2) return nullptr;
             uint16_t b = stk.back(); stk.pop_back();
@@ -101,6 +136,7 @@ shared_ptr<uint16_t> rpn_calc(command const cmd, uint16_t const value = 0) {
             stk.push_back(static_cast<uint16_t>((a | b) & 0xFFFFu));
             return top_ptr();
         }
+
         case cmd_and: {
             if (stk.size() < 2) return nullptr;
             uint16_t b = stk.back(); stk.pop_back();
@@ -108,13 +144,15 @@ shared_ptr<uint16_t> rpn_calc(command const cmd, uint16_t const value = 0) {
             stk.push_back(static_cast<uint16_t>((a & b) & 0xFFFFu));
             return top_ptr();
         }
+
         case cmd_add: {
             if (stk.size() < 2) return nullptr;
             uint32_t b = stk.back(); stk.pop_back();
             uint32_t a = stk.back(); stk.pop_back();
-            stk.push_back(mask16(a + b));  // wrap to 16 bits
+            stk.push_back(mask16(a + b));  // 16-bit wraparound
             return top_ptr();
         }
+
         default:
             return top_ptr();
     }
