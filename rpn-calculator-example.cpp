@@ -48,10 +48,76 @@ uint8_t const width = 16U;
  * Students should create or add any functions or classes they may need.
  */
 shared_ptr<uint16_t> rpn_calc(command const cmd, uint16_t const value = 0) {
-    // this is example code which returns a (smart shared) pointer to 16-bit value
-    uint16_t val = 0b1001100100000011;
-    shared_ptr<uint16_t> result = make_shared<uint16_t>(val);
-    return result;
+
+    static vector<uint16_t> stk;
+
+    auto top_ptr = [&]() -> shared_ptr<uint16_t> {
+        if (stk.empty()) return nullptr;
+        return make_shared<uint16_t>(stk.back());
+    };
+
+    auto mask16 = [](uint32_t x) -> uint16_t { return static_cast<uint16_t>(x & 0xFFFFu); };
+
+    switch (cmd) {
+        case cmd_enter: {
+            stk.push_back(mask16(value));
+            return top_ptr();
+        }
+        case cmd_clear: {
+            stk.clear();
+            return nullptr;
+        }
+        case cmd_pop: {
+            // Pop N items if value > 0, else pop 1 by default
+            size_t n = (value > 0) ? static_cast<size_t>(value) : 1u;
+            if (n >= stk.size()) {
+                stk.clear();
+                return nullptr;
+            } else {
+                while (n-- && !stk.empty()) stk.pop_back();
+                return top_ptr();
+            }
+        }
+        case cmd_top: {
+            return top_ptr();
+        }
+        case cmd_left_shift: {
+            if (stk.empty()) return nullptr;
+            uint16_t shift = static_cast<uint16_t>(value & 0xF); // 0..15
+            uint32_t v = (static_cast<uint32_t>(stk.back()) << shift);
+            stk.back() = mask16(v);
+            return top_ptr();
+        }
+        case cmd_right_shift: {
+            if (stk.empty()) return nullptr;
+            uint16_t shift = static_cast<uint16_t>(value & 0xF); // logical right shift
+            stk.back() = static_cast<uint16_t>(static_cast<uint32_t>(stk.back()) >> shift);
+            return top_ptr();
+        }
+        case cmd_or: {
+            if (stk.size() < 2) return nullptr;
+            uint16_t b = stk.back(); stk.pop_back();
+            uint16_t a = stk.back(); stk.pop_back();
+            stk.push_back(static_cast<uint16_t>((a | b) & 0xFFFFu));
+            return top_ptr();
+        }
+        case cmd_and: {
+            if (stk.size() < 2) return nullptr;
+            uint16_t b = stk.back(); stk.pop_back();
+            uint16_t a = stk.back(); stk.pop_back();
+            stk.push_back(static_cast<uint16_t>((a & b) & 0xFFFFu));
+            return top_ptr();
+        }
+        case cmd_add: {
+            if (stk.size() < 2) return nullptr;
+            uint32_t b = stk.back(); stk.pop_back();
+            uint32_t a = stk.back(); stk.pop_back();
+            stk.push_back(mask16(a + b));  // wrap to 16 bits
+            return top_ptr();
+        }
+        default:
+            return top_ptr();
+    }
 }
 
 /*
