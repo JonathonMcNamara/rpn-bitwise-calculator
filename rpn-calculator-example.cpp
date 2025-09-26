@@ -27,7 +27,8 @@ uint8_t const table_width[] = {14, 18, 14, 18, 14, 18};
 // test harness structs and params
 #define VALUE_NULLPTR -999
 
-enum command : uint16_t {
+enum command : uint16_t
+{
     cmd_enter = 0,
     cmd_clear,
     cmd_pop,
@@ -38,8 +39,8 @@ enum command : uint16_t {
     cmd_and,
     cmd_add,
 };
-vector<string> command_name = {"cmd_enter",       "cmd_clear", "cmd_pop", "cmd_top", "cmd_left_shift",
-                               "cmd_right_shift", "cmd_or",    "cmd_and", "cmd_add"};
+vector<string> command_name = {"cmd_enter", "cmd_clear", "cmd_pop", "cmd_top", "cmd_left_shift",
+                               "cmd_right_shift", "cmd_or", "cmd_and", "cmd_add"};
 uint8_t const width = 16U;
 
 /*
@@ -47,12 +48,12 @@ uint8_t const width = 16U;
  * Students should create or add any data structures needed.
  * Students should create or add any functions or classes they may need.
  */
-shared_ptr<uint16_t> rpn_calc(command const cmd, uint16_t const value = 0) {
+shared_ptr<uint16_t> rpn_calc(command const cmd, uint16_t const value = 0)
+{
 
- static vector<uint16_t> stk;
+        static vector<uint16_t> stk;
 
-    // In the CSV, "no value provided" is -999 (VALUE_NULLPTR).
-    // That arrives here as uint16_t( -999 ) == 64537.
+    // CSV "no value" sentinel (-999) arrives as this uint16_t
     constexpr uint16_t NO_VALUE = static_cast<uint16_t>(-999);
 
     auto top_ptr = [&]() -> shared_ptr<uint16_t> {
@@ -60,24 +61,19 @@ shared_ptr<uint16_t> rpn_calc(command const cmd, uint16_t const value = 0) {
         return make_shared<uint16_t>(stk.back());
     };
 
-    auto mask16 = [](uint32_t x) -> uint16_t {
-        return static_cast<uint16_t>(x & 0xFFFFu);
-    };
+    auto mask16 = [](uint32_t x) -> uint16_t { return static_cast<uint16_t>(x & 0xFFFFu); };
 
     switch (cmd) {
         case cmd_enter: {
-            // Push exactly what was entered, wrapped to 16 bits.
             stk.push_back(mask16(value));
             return top_ptr();
         }
-
         case cmd_clear: {
             stk.clear();
             return nullptr;
         }
-
         case cmd_pop: {
-            // Pop N items when value is given; otherwise pop 1.
+            // Pop N if provided (>0), else pop 1
             size_t n = (value != NO_VALUE && value > 0) ? static_cast<size_t>(value) : 1u;
             if (n >= stk.size()) {
                 stk.clear();
@@ -86,49 +82,36 @@ shared_ptr<uint16_t> rpn_calc(command const cmd, uint16_t const value = 0) {
             while (n-- && !stk.empty()) stk.pop_back();
             return top_ptr();
         }
-
         case cmd_top: {
             return top_ptr();
         }
-
         case cmd_left_shift: {
             if (stk.empty()) return nullptr;
-
-            uint16_t shift_amt = 0;
+            uint16_t shift_amt;
             if (value != NO_VALUE) {
-                shift_amt = static_cast<uint16_t>(value & 0xF);          // explicit count
+                shift_amt = static_cast<uint16_t>(value & 0xF);
             } else {
-                // pop shift amount from stack (RPN style)
                 if (stk.size() < 2) return nullptr;
                 shift_amt = static_cast<uint16_t>(stk.back() & 0xF);
                 stk.pop_back();
             }
-
             uint32_t v = static_cast<uint32_t>(stk.back()) << shift_amt;
             stk.back() = mask16(v);
             return top_ptr();
         }
-
         case cmd_right_shift: {
             if (stk.empty()) return nullptr;
-
-            uint16_t shift_amt = 0;
+            uint16_t shift_amt;
             if (value != NO_VALUE) {
-                shift_amt = static_cast<uint16_t>(value & 0xF);          // explicit count
+                shift_amt = static_cast<uint16_t>(value & 0xF);
             } else {
-                // pop shift amount from stack (RPN style)
                 if (stk.size() < 2) return nullptr;
                 shift_amt = static_cast<uint16_t>(stk.back() & 0xF);
                 stk.pop_back();
             }
-
-            // logical right shift
-            stk.back() = static_cast<uint16_t>(
-                static_cast<uint32_t>(stk.back()) >> shift_amt
-            );
+            stk.back() = static_cast<uint16_t>(static_cast<uint32_t>(stk.back()) >> shift_amt);
             return top_ptr();
         }
-
         case cmd_or: {
             if (stk.size() < 2) return nullptr;
             uint16_t b = stk.back(); stk.pop_back();
@@ -136,7 +119,6 @@ shared_ptr<uint16_t> rpn_calc(command const cmd, uint16_t const value = 0) {
             stk.push_back(static_cast<uint16_t>((a | b) & 0xFFFFu));
             return top_ptr();
         }
-
         case cmd_and: {
             if (stk.size() < 2) return nullptr;
             uint16_t b = stk.back(); stk.pop_back();
@@ -144,25 +126,33 @@ shared_ptr<uint16_t> rpn_calc(command const cmd, uint16_t const value = 0) {
             stk.push_back(static_cast<uint16_t>((a & b) & 0xFFFFu));
             return top_ptr();
         }
-
         case cmd_add: {
+            // If a value is present (including 0), do a UNARY add: top = top + value
+            if (value != NO_VALUE) {
+                if (stk.empty()) return nullptr;
+                uint32_t a = stk.back(); stk.pop_back();
+                stk.push_back(mask16(a + static_cast<uint32_t>(value)));
+                return top_ptr();
+            }
+            // Otherwise, BINARY add: pop two, push sum
             if (stk.size() < 2) return nullptr;
             uint32_t b = stk.back(); stk.pop_back();
             uint32_t a = stk.back(); stk.pop_back();
-            stk.push_back(mask16(a + b));  // 16-bit wraparound
+            stk.push_back(mask16(a + b));
             return top_ptr();
         }
-
         default:
             return top_ptr();
     }
+
 }
 
 /*
  * *** STUDENTS SHOULD NOT NEED TO CHANGE THE CODE BELOW. IT IS A CUSTOM TEST HARNESS. ***
  */
 
-void header() {
+void header()
+{
     cout << left << setw(table_width[0]) << setfill(' ') << "pass/fail";
     cout << left << setw(table_width[1]) << setfill(' ') << "command";
     cout << left << setw(table_width[2]) << setfill(' ') << "value";
@@ -178,34 +168,43 @@ void header() {
     cout << left << setw(table_width[5]) << setfill(' ') << "--------" << endl;
 }
 
-void print_row(bool const test_success, command const cmd, int16_t const value, shared_ptr<uint16_t> top_of_stack) {
+void print_row(bool const test_success, command const cmd, int16_t const value, shared_ptr<uint16_t> top_of_stack)
+{
     // print results
     string const pass_fail = test_success ? "PASS" : "FAIL";
     cout << left << setw(table_width[0]) << setfill(' ') << pass_fail;
     cout << left << setw(table_width[1]) << setfill(' ') << command_name[cmd];
-    if (value == VALUE_NULLPTR) {
+    if (value == VALUE_NULLPTR)
+    {
         cout << left << setw(table_width[2]) << setfill(' ') << " ";
         cout << left << setw(table_width[3]) << setfill(' ') << " ";
-    } else {
+    }
+    else
+    {
         cout << left << setw(table_width[2]) << setfill(' ') << value;
         cout << left << setw(table_width[3]) << setfill(' ') << bitset<width>(value);
     }
 
-    if (top_of_stack) {
+    if (top_of_stack)
+    {
         cout << left << setw(table_width[4]) << setfill(' ') << *top_of_stack;
         cout << left << setw(table_width[5]) << setfill(' ') << bitset<width>(*top_of_stack) << endl;
-    } else {
+    }
+    else
+    {
         cout << left << setw(table_width[4]) << setfill(' ') << " ";
         cout << left << setw(table_width[5]) << setfill(' ') << " " << endl;
     }
 }
 
-vector<string> split(string const &s, string const &delimiter) {
+vector<string> split(string const &s, string const &delimiter)
+{
     vector<string> tokens;
     size_t pos = 0;
     size_t start = 0;
     string token;
-    while (pos != string::npos) {
+    while (pos != string::npos)
+    {
         pos = s.find(",", start);
         token = s.substr(start, pos - start);
         tokens.push_back(token);
@@ -215,24 +214,31 @@ vector<string> split(string const &s, string const &delimiter) {
     return tokens;
 }
 
-void init_command_map(unordered_map<string, command> &command_map) {
-    for (size_t i = 0; i < command_name.size(); i++) {
+void init_command_map(unordered_map<string, command> &command_map)
+{
+    for (size_t i = 0; i < command_name.size(); i++)
+    {
         string const cmd = command_name[i];
         command_map[cmd] = static_cast<command>(i);
     }
 }
 
 bool parse_csv_line(string const line, unordered_map<string, command> command_map, command &input_cmd,
-                    uint16_t &input_value, int32_t &answer_value) {
-    try {
+                    uint16_t &input_value, int32_t &answer_value)
+{
+    try
+    {
         vector<string> tokens = split(line, ",");
 
         // get command
         string cmd = tokens[0];
         // if command is  valid
-        if (command_map.count(cmd) == 1) {
+        if (command_map.count(cmd) == 1)
+        {
             input_cmd = command_map[cmd];
-        } else {
+        }
+        else
+        {
             cout << "ERROR: Invalid command cmd=" << cmd << endl;
             return false;
         }
@@ -240,8 +246,9 @@ bool parse_csv_line(string const line, unordered_map<string, command> command_ma
         // get input and value
         input_value = stoi(tokens[1].c_str());
         answer_value = stoi(tokens[2].c_str());
-
-    } catch (exception const &e) {
+    }
+    catch (exception const &e)
+    {
         cout << "ERROR: Unable to parse input csv file, line=" << line << endl;
         cout << "ERROR: exception e=" << e.what() << endl;
         return false;
@@ -250,10 +257,12 @@ bool parse_csv_line(string const line, unordered_map<string, command> command_ma
     return true;
 }
 
-bool test() {
+bool test()
+{
     // open input file
     ifstream input_file(INPUT_CSV_FILE);
-    if (!input_file.is_open()) {
+    if (!input_file.is_open())
+    {
         cout << "ERROR: Unable to find and open the file " << INPUT_CSV_FILE << endl;
         cout << "       Make sure the path to the file is correct in your code" << endl;
         return false;
@@ -271,23 +280,29 @@ bool test() {
     uint16_t pass = 0;
     string line;
     size_t row = 0;
-    while (getline(input_file, line)) {
+    while (getline(input_file, line))
+    {
         // cout << "line " << row << ":" << line << endl;
-        if (row > 0) {
+        if (row > 0)
+        {
             // parse csv line
             command input_cmd;
             uint16_t input_value;
             int32_t input_answer;
             bool parse_success = parse_csv_line(line, command_map, input_cmd, input_value, input_answer);
-            if (!parse_success) {
+            if (!parse_success)
+            {
                 return false;
             }
 
             // set answer value
             shared_ptr<uint16_t> answer;
-            if (input_answer == VALUE_NULLPTR) {
+            if (input_answer == VALUE_NULLPTR)
+            {
                 answer = nullptr;
-            } else {
+            }
+            else
+            {
                 answer = make_shared<uint16_t>(input_answer);
             }
 
@@ -298,7 +313,8 @@ bool test() {
             bool test_success = false;
             bool both_null = answer == nullptr && result == nullptr;
             bool both_same_value = answer && result && (*answer == *result);
-            if (both_null || both_same_value) {
+            if (both_null || both_same_value)
+            {
                 pass += 1;
                 test_success = true;
             }
@@ -317,9 +333,12 @@ bool test() {
 
     // summarize results
     cout << "-------------------------------------------" << endl;
-    if (all_test_pass) {
+    if (all_test_pass)
+    {
         cout << "SUCCESS ";
-    } else {
+    }
+    else
+    {
         cout << "FAILURE ";
     }
     const size_t num_tests = row - 1;
@@ -329,8 +348,10 @@ bool test() {
     return success;
 }
 
-int main() {
-    if (!test()) {
+int main()
+{
+    if (!test())
+    {
         return -1;
     }
     return 0;
